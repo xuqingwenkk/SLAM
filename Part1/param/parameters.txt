@@ -1,0 +1,15 @@
+#board size
+bs_row=8
+bs_col=6
+#size of each chess grid
+bs=18
+
+#save image path
+savedir=/home/robotqw/robotqw/SLAM/Project/Part1/output/
+
+output_dir=/home/robotqw/robotqw/SLAM/Project/Part1/output/caliberation_result.txt
+image_dir=/home/robotqw/robotqw/SLAM/Project/Part1/images/
+
+#The number of images
+image_count=14
+
