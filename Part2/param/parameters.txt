@@ -1,0 +1,30 @@
+#board size
+bs_row=8
+bs_col=6
+#size of each chess grid
+bs=18
+
+#save image path
+savedir=/home/robotqw/robotqw/SLAM/Project/Part2/output/
+
+output_dir=/home/robotqw/robotqw/SLAM/Project/Part2/output/caliberation_result.txt
+image_dir=/home/robotqw/robotqw/SLAM/Project/Part2/images/
+
+#The number of images
+image_count=14
+test_image_num=2
+
+# camera
+camera.cx=987.5
+camera.cy=532.1
+camera.fx=472.4
+camera.fy=470.4
+camera.scale=1000.0
+camera.k1=-0.156
+camera.k2=0.396
+camera.k3=-0.665
+camera.k4=0.401
+
+# detect & desp
+detector=SIFT
+descriptor=SIFT

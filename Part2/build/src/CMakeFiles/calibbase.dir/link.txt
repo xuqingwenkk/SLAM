@@ -1,0 +1,2 @@
+/usr/bin/ar cr ../../lib/libcalibbase.a  CMakeFiles/calibbase.dir/sfm.cpp.o
+/usr/bin/ranlib ../../lib/libcalibbase.a
