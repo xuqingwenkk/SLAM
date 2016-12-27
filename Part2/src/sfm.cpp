@@ -1,6 +1,11 @@
 #include "sfm.h"
 #include "opencv2/nonfree/nonfree.hpp" //SIFT and SURF
 
+#include "pcl/io/pcd_io.h"
+#include "pcl/point_types.h"
+#include "pcl/common/transforms.h"
+#include "pcl/visualization/cloud_viewer.h"
+
 CAMERA_INTRINSIC_PARAM getDefaultCamera()
 {
   static ParamReader pr;
@@ -128,15 +133,13 @@ void computeKeypointAndDesp(FRAME & frame, string detector, string descriptor)
   _descriptor->compute(frame.rgb, frame.kp, frame.desp);
 }
 
-vector<cv::DMatch> getGoodMatches(FRAME & f1, FRAME & f2)
+void getGoodMatches(FRAME & f1, FRAME & f2, vector<cv::DMatch> & good_matches)
 {
   vector<cv::DMatch> matches;
   cv::FlannBasedMatcher matcher;
   matcher.match(f1.desp, f2.desp, matches);
   cout << "Find " << matches.size() << " matches" << endl;
-  
   // filter good matches
-  vector<cv::DMatch> good_matches;
   double minDis = 9999;
   for(size_t i = 0; i < matches.size(); i++)
   {
@@ -148,11 +151,109 @@ vector<cv::DMatch> getGoodMatches(FRAME & f1, FRAME & f2)
     if(matches[i].distance < 4*minDis)
       good_matches.push_back(matches[i]);
   }
-  
   cout << "good matches = " << good_matches.size() << endl;
-  cv::Mat imgMatches;
-  cv::drawMatches(f1.rgb, f1.kp, f2.rgb, f2.kp, good_matches, imgMatches);
-  cv::namedWindow("good matches", cv::WINDOW_NORMAL);
-  cv::imshow("good matches", imgMatches);
-  cv::waitKey(0);
+}
+
+void get_matched_points(vector<cv::KeyPoint>& kp1, vector<cv::KeyPoint>& kp2, vector<cv::DMatch> matches, vector<cv::Point2f>& p1, vector<cv::Point2f>& p2)
+{  
+  p1.clear();
+  p2.clear();
+  for (int i = 0; i < matches.size(); ++i)
+  {
+    p1.push_back(kp1[matches[i].queryIdx].pt);
+    p2.push_back(kp2[matches[i].trainIdx].pt);
+  }
+}
+
+bool find_transform(CAMERA_INTRINSIC_PARAM& camera, vector<cv::Point2f>& p1, vector<cv::Point2f>& p2, cv::Mat& R, cv::Mat& T, cv::Mat& mask)
+{
+  cv::Mat F = cv::findFundamentalMat(p1, p2, CV_FM_RANSAC, 3, 0.99, mask);
+  if (F.empty()) return false;
+  double feasible_count = countNonZero(mask);
+  cout << (int)feasible_count << " -in- " << p1.size() << endl;
+  cv::Mat K= cv::Mat::eye(3,3,CV_64FC1);  
+  K.at<double>(0,0) = camera.fx;  
+  K.at<double>(1,1) = camera.fy;  
+  K.at<double>(0,2) = camera.cx;  
+  K.at<double>(1,2) = camera.cy;
+  
+  cv::Mat Kt=K.t();
+  cv::Mat E=Kt*F*K; 
+  
+  cv::SVD svd(E);
+  
+  cv::Mat W=cv::Mat::eye(3,3,CV_64FC1);  
+  W.at<double>(0,1)=-1;  
+  W.at<double>(1,0)=1;  
+  W.at<double>(2,2)=1;  
+  
+  R=svd.u*W*svd.vt;  
+  T=svd.u.col(2);
+  
+  return true;
+}
+
+void reconstruct(CAMERA_INTRINSIC_PARAM& camera, cv::Mat& R, cv::Mat& T, vector<cv::Point2f>& p1, vector<cv::Point2f>& p2, cv::Mat& structure)
+{
+  cv::Mat K= cv::Mat::eye(3,3,CV_64FC1);  
+  K.at<double>(0,0) = camera.fx;  
+  K.at<double>(1,1) = camera.fy;  
+  K.at<double>(0,2) = camera.cx;  
+  K.at<double>(1,2) = camera.cy;
+  //两个相机的投影矩阵[R T]，triangulatePoints只支持float型
+  cv::Mat proj1(3, 4, CV_32FC1);
+  cv::Mat proj2(3, 4, CV_32FC1);
+  proj1(cv::Range(0, 3), cv::Range(0, 3)) = cv::Mat::eye(3, 3, CV_32FC1);
+  proj1.col(3) = cv::Mat::zeros(3, 1, CV_32FC1);
+  cv::Mat rotation(3, 3, CV_32FC1);
+  cv::Mat trans(3, 1, CV_32FC1);
+  R.convertTo(rotation, CV_32FC1);
+  cv::Mat temp1 = proj2(cv::Range(0, 3), cv::Range(0, 3));
+  rotation.copyTo(temp1);
+  T.convertTo(trans, CV_32FC1);
+  cv::Mat temp2 = proj2.col(3);
+  trans.copyTo(temp2);
+//R.convertTo(proj2(Range(0, 3), Range(0, 3)), CV_32FC1);
+//T.convertTo(proj2.col(3), CV_32FC1);
+  cv::Mat fK;
+  K.convertTo(fK, CV_32FC1);
+  proj1 = fK*proj1;
+  proj2 = fK*proj2;
+  //三角重建
+  cv::triangulatePoints(proj1, proj2, p1, p2, structure);
+}
+
+
+void maskout_points(vector<cv::Point2f>& p1, cv::Mat& mask)
+{
+  vector<cv::Point2f> p1_copy = p1;
+  p1.clear();
+  for (int i = 0; i < mask.rows; ++i)
+  {
+    if (mask.at<uchar>(i) > 0)
+      p1.push_back(p1_copy[i]);
+  }
+}
+
+void show4NPoints(cv::Mat& structure)
+{
+  pcl::PointCloud<pcl::PointXYZ>::Ptr point_cloud_ptr(new pcl::PointCloud<pcl::PointXYZ>);
+  for (size_t i = 0; i < structure.cols; ++i)
+  {
+    cv::Mat_<float> c = structure.col(i);
+    c /= c(3);	//齐次坐标，需要除以最后一个元素才是真正的坐标值
+    pcl::PointXYZ point;
+    point.x = c(0);
+    point.y = c(1);
+    point.z = c(2);
+    //cv::Point3f(c(0), c(1), c(2));
+    point_cloud_ptr->points.push_back(point);
+  }
+  point_cloud_ptr->width = (int)point_cloud_ptr->points.size();
+  point_cloud_ptr->height = 1;
+  pcl::visualization::CloudViewer viewer("viewer");
+  viewer.showCloud(point_cloud_ptr);
+  while(!viewer.wasStopped())
+  {
+  }
 }

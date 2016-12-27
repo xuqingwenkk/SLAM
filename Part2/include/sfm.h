@@ -3,6 +3,7 @@
 #include "opencv2/highgui/highgui.hpp"
 #include "opencv2/calib3d/calib3d.hpp"
 #include "opencv2/features2d/features2d.hpp"
+#include "opencv2/core/core.hpp"
 #include <fstream>
 #include <vector>
 #include <string>
@@ -74,4 +75,14 @@ void Estimation(vector<vector<cv::Point3f> > & object_Points, cv::Matx33d & intr
 
 void computeKeypointAndDesp(FRAME & frame, string detector, string descriptor);
 
-vector<cv::DMatch> getGoodMatches(FRAME & f1, FRAME & f2);
+void getGoodMatches(FRAME & f1, FRAME & f2, vector<cv::DMatch> & good_matches);
+
+void get_matched_points(vector<cv::KeyPoint>& kp1, vector<cv::KeyPoint>& kp2, vector<cv::DMatch> matches, vector<cv::Point2f>& p1, vector<cv::Point2f>& p2);
+
+bool find_transform(CAMERA_INTRINSIC_PARAM& camera, vector<cv::Point2f>& p1, vector<cv::Point2f>& p2, cv::Mat& R, cv::Mat& T, cv::Mat& mask);
+
+void reconstruct(CAMERA_INTRINSIC_PARAM& camera, cv::Mat& R, cv::Mat& T, vector<cv::Point2f>& p1, vector<cv::Point2f>& p2, cv::Mat& structure);
+
+void maskout_points(vector<cv::Point2f>& p1, cv::Mat& mask);
+
+void show4NPoints(cv::Mat& structure);
