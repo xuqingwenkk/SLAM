@@ -1,0 +1,6 @@
+#!/bin/bash
+dir=$(ls -l /home/robotqw/robotqw/SLAM/Project/Part3/images/ |awk '/^d/ {print $NF}')
+for i in $dir
+do
+    echo $i 
+done
