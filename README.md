@@ -12,3 +12,5 @@ second push: structure from motion between two images, but do not know how to ch
 
 Part3: Visual Odometry
 For the sake of lack of feature, there are not enough good matches. Therefore the fundamental task is in the improvement of Part2
+
+To be continue...
